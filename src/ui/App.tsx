@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { key, inBounds, serialize, deserialize, type VoxelMap } from "../core/voxels";
+import {
+  GRID,
+  key,
+  inBounds,
+  serialize,
+  deserialize,
+  type Cell,
+  type VoxelMap,
+} from "../core/voxels";
 import { PALETTE } from "../core/shading";
 import { starterTree } from "../core/templates";
 import { toJSONText, fromJSONText } from "../core/exporters/json";
@@ -12,10 +20,14 @@ import { downloadBlob, downloadText } from "./download";
 import ImportModal from "./ImportModal";
 import AIHelpModal from "./AIHelpModal";
 import LibraryModal from "./LibraryModal";
+import TemplatesModal from "./TemplatesModal";
+import Onboarding, { ONBOARDED_KEY } from "./Onboarding";
 import S from "./App.module.css";
 
 type Tool = "place" | "remove" | "paint";
-type Dialog = null | "import" | "ai" | "library";
+type Dialog = null | "import" | "ai" | "library" | "templates";
+
+const mirrorX = (x: number) => GRID - 1 - x;
 
 export default function App() {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -25,12 +37,22 @@ export default function App() {
   const [version, setVersion] = useState(0);
   const [tool, setTool] = useState<Tool>("place");
   const [color, setColor] = useState(0);
+  const [mirror, setMirror] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [shared, setShared] = useState(false);
+  const [showTour, setShowTour] = useState(() => {
+    try {
+      return !localStorage.getItem(ONBOARDED_KEY);
+    } catch {
+      return false;
+    }
+  });
   const toolRef = useRef(tool);
   const colorRef = useRef(color);
+  const mirrorRef = useRef(mirror);
   toolRef.current = tool;
   colorRef.current = color;
+  mirrorRef.current = mirror;
   const sceneRef = useRef<VoxelScene | null>(null);
 
   const bump = useCallback(() => setVersion((n) => n + 1), []);
@@ -49,10 +71,12 @@ export default function App() {
   }, [bump]);
 
   const clearAll = useCallback(() => {
-    if (voxelsRef.current.size === 0) return;
-    snapshot();
-    voxelsRef.current = new Map();
-    bump();
+    if (voxelsRef.current.size > 0) {
+      snapshot();
+      voxelsRef.current = new Map();
+      bump();
+    }
+    setDialog("templates");
   }, [snapshot, bump]);
 
   const replaceModel = useCallback(
@@ -64,41 +88,84 @@ export default function App() {
     [snapshot, bump]
   );
 
+  // With mirror mode on, an action lands on both sides of the x symmetry plane.
+  const withMirror = useCallback((cell: Cell): Cell[] => {
+    const cells: Cell[] = [cell];
+    if (mirrorRef.current) {
+      const mx = mirrorX(cell[0]);
+      if (mx !== cell[0]) cells.push([mx, cell[1], cell[2]]);
+    }
+    return cells;
+  }, []);
+
+  const placeTargets = useCallback(
+    (pick: Pick): Cell[] => {
+      let target: Cell | null = null;
+      if (pick.type === "ground") {
+        target = [pick.x, 0, pick.z];
+      } else {
+        const t: Cell = [
+          pick.cell[0] + pick.normal[0],
+          pick.cell[1] + pick.normal[1],
+          pick.cell[2] + pick.normal[2],
+        ];
+        if (inBounds(t[0], t[1], t[2])) target = t;
+      }
+      return target ? withMirror(target) : [];
+    },
+    [withMirror]
+  );
+
   const handleTap = useCallback(
     (pick: Pick) => {
       const vox = voxelsRef.current;
       const t = toolRef.current;
-      if (pick.type === "ground") {
-        if (t !== "place") return;
+      if (t === "place") {
+        const cells = placeTargets(pick);
+        if (!cells.length) return;
         snapshot();
-        vox.set(key(pick.x, 0, pick.z), colorRef.current);
-      } else {
-        const [cx, cy, cz] = pick.cell;
-        const ck = key(cx, cy, cz);
+        for (const [x, y, z] of cells) vox.set(key(x, y, z), colorRef.current);
+      } else if (pick.type === "voxel") {
+        const cells = withMirror(pick.cell);
         if (t === "remove") {
           snapshot();
-          vox.delete(ck);
-        } else if (t === "paint") {
-          if (vox.get(ck) === colorRef.current) return;
-          snapshot();
-          vox.set(ck, colorRef.current);
+          for (const [x, y, z] of cells) vox.delete(key(x, y, z));
         } else {
-          const x = cx + pick.normal[0];
-          const y = cy + pick.normal[1];
-          const z = cz + pick.normal[2];
-          if (!inBounds(x, y, z)) return;
+          const targets = cells.filter(([x, y, z]) => {
+            const c = vox.get(key(x, y, z));
+            return c !== undefined && c !== colorRef.current;
+          });
+          if (!targets.length) return;
           snapshot();
-          vox.set(key(x, y, z), colorRef.current);
+          for (const [x, y, z] of targets) vox.set(key(x, y, z), colorRef.current);
         }
+      } else {
+        return;
       }
       bump();
     },
-    [snapshot, bump]
+    [snapshot, bump, withMirror, placeTargets]
+  );
+
+  const handleHover = useCallback(
+    (pick: Pick | null) => {
+      const scene = sceneRef.current;
+      if (!scene) return;
+      if (!pick || toolRef.current !== "place") {
+        scene.setGhost([]);
+        return;
+      }
+      scene.setGhost(placeTargets(pick), PALETTE[colorRef.current].hex);
+    },
+    [placeTargets]
   );
 
   // Scene setup (once)
   useEffect(() => {
-    const scene = new VoxelScene(mountRef.current!, { onTap: handleTap });
+    const scene = new VoxelScene(mountRef.current!, {
+      onTap: handleTap,
+      onHover: handleHover,
+    });
     sceneRef.current = scene;
     scene.setVoxels(voxelsRef.current);
     return () => {
@@ -107,6 +174,11 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Ghost is stale when the tool/color changes away from the pointer.
+  useEffect(() => {
+    if (tool !== "place") sceneRef.current?.setGhost([]);
+  }, [tool]);
 
   // Restore on load: share link first, then autosave, else keep the starter.
   useEffect(() => {
@@ -121,11 +193,13 @@ export default function App() {
       return;
     }
     void loadAutosave().then((saved) => {
-      if (saved && !restoredRef.current) {
-        const m = deserialize(saved, PALETTE.length);
-        if (m.size > 0) voxelsRef.current = m;
-      }
+      if (restoredRef.current) return;
       restoredRef.current = true;
+      if (saved) {
+        const m = deserialize(saved, PALETTE.length);
+        voxelsRef.current = m;
+        if (m.size === 0) setDialog("templates");
+      }
       bump();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,7 +264,7 @@ export default function App() {
           Undo
         </button>
         <button className={S.btn} onClick={clearAll}>
-          Clear
+          New
         </button>
         <button className={S.btn} onClick={() => setDialog("library")}>
           Library
@@ -221,6 +295,7 @@ export default function App() {
           <br />
           {count} blocks
         </div>
+        {showTour && <Onboarding onDone={() => setShowTour(false)} />}
       </div>
 
       {dialog === "import" && (
@@ -238,6 +313,9 @@ export default function App() {
           onLoad={replaceModel}
           getCurrent={() => voxelsRef.current}
         />
+      )}
+      {dialog === "templates" && (
+        <TemplatesModal onClose={() => setDialog(null)} onPick={replaceModel} />
       )}
 
       <div className={S.footer}>
@@ -258,6 +336,13 @@ export default function App() {
           onClick={() => setTool("paint")}
         >
           Paint
+        </button>
+        <button
+          className={mirror ? S.btnActive : S.btn}
+          onClick={() => setMirror(!mirror)}
+          title="Mirror every edit across the X axis"
+        >
+          Mirror
         </button>
         <div className={S.swatchRow}>
           {PALETTE.map((p, i) => (

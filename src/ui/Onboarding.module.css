@@ -1,0 +1,55 @@
+.wrap {
+  position: absolute;
+  inset: auto 0 16px 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  padding: 0 16px;
+}
+
+.card {
+  pointer-events: auto;
+  background: #232830;
+  border-radius: 4px;
+  padding: 12px 14px;
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
+.icon {
+  font-size: 22px;
+}
+
+.text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e8e6e0;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dots {
+  display: flex;
+  gap: 4px;
+  margin-right: auto;
+}
+
+.dot,
+.dotOn {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3a4150;
+}
+
+.dotOn {
+  background: #6abe30;
+}

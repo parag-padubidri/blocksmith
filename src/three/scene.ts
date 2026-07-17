@@ -3,6 +3,7 @@
 // pinch/scroll = zoom.
 
 import {
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -44,6 +45,13 @@ export class VoxelScene {
   private mount: HTMLElement;
   private opts: VoxelSceneOptions;
   private disposers: (() => void)[] = [];
+  private ghostGeo = new BoxGeometry(1.001, 1.001, 1.001);
+  private ghostMat = new MeshBasicMaterial({
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false,
+  });
+  private ghostPool: Mesh[] = [];
 
   constructor(mount: HTMLElement, opts: VoxelSceneOptions) {
     this.mount = mount;
@@ -230,6 +238,25 @@ export class VoxelScene {
     });
   }
 
+  // Translucent preview voxels showing where Place will land (plural so
+  // mirror mode can show both sides).
+  setGhost(cells: Cell[], hex?: string) {
+    if (hex) this.ghostMat.color.set(hex);
+    while (this.ghostPool.length < cells.length) {
+      const m = new Mesh(this.ghostGeo, this.ghostMat);
+      this.ghostPool.push(m);
+      this.scene.add(m);
+    }
+    this.ghostPool.forEach((m, i) => {
+      if (i < cells.length) {
+        m.visible = true;
+        m.position.set(cells[i][0] + 0.5, cells[i][1] + 0.5, cells[i][2] + 0.5);
+      } else {
+        m.visible = false;
+      }
+    });
+  }
+
   setVoxels(voxels: VoxelMap) {
     const data = buildMesh(voxels);
     const geo = new BufferGeometry();
@@ -245,6 +272,8 @@ export class VoxelScene {
     this.ro.disconnect();
     this.disposers.forEach((d) => d());
     this.voxelMesh.geometry.dispose();
+    this.ghostGeo.dispose();
+    this.ghostMat.dispose();
     this.renderer.dispose();
     this.mount.removeChild(this.renderer.domElement);
   }
