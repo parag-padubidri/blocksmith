@@ -238,6 +238,29 @@ export class VoxelScene {
     });
   }
 
+  // Hero-shot PNG: current camera angle at `scale`x resolution, grid and
+  // ghosts hidden so the model stands alone.
+  captureHero(scale = 2): Promise<Blob | null> {
+    const el = this.renderer.domElement;
+    const w = this.mount.clientWidth;
+    const h = this.mount.clientHeight;
+    const hidden = this.scene.children.filter(
+      (o) => o.type === "GridHelper" || this.ghostPool.includes(o as Mesh)
+    );
+    const prevVisible = hidden.map((o) => o.visible);
+    hidden.forEach((o) => (o.visible = false));
+    this.renderer.setSize(w * scale, h * scale, false);
+    this.renderer.render(this.scene, this.camera);
+    return new Promise((resolve) => {
+      el.toBlob((blob) => {
+        hidden.forEach((o, i) => (o.visible = prevVisible[i]));
+        this.renderer.setSize(w, h);
+        this.renderer.render(this.scene, this.camera);
+        resolve(blob);
+      }, "image/png");
+    });
+  }
+
   // Translucent preview voxels showing where Place will land (plural so
   // mirror mode can show both sides).
   setGhost(cells: Cell[], hex?: string) {

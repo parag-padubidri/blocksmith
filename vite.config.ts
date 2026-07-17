@@ -32,6 +32,13 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: { three: ["three"] },
+      },
+    },
+  },
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",

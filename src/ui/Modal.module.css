@@ -131,6 +131,13 @@
   border-radius: 2px;
 }
 
+.miniBtn:focus-visible,
+.thumbBtn:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid #6abe30;
+  outline-offset: 1px;
+}
+
 .miniBtnDanger {
   composes: miniBtn;
   color: #e08a8a;

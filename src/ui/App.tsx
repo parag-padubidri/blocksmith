@@ -180,6 +180,26 @@ export default function App() {
     if (tool !== "place") sceneRef.current?.setGhost([]);
   }, [tool]);
 
+  // Keyboard shortcuts: 1/2/3 tools, M mirror, Ctrl+Z undo.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        undo();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "1") setTool("place");
+      else if (e.key === "2") setTool("remove");
+      else if (e.key === "3") setTool("paint");
+      else if (e.key.toLowerCase() === "m") setMirror((m) => !m);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo]);
+
   // Restore on load: share link first, then autosave, else keep the starter.
   useEffect(() => {
     const fromHash = parseShareHash(location.hash);
@@ -231,6 +251,12 @@ export default function App() {
     downloadBlob("model.glb", new Blob([buf], { type: "model/gltf-binary" }));
   };
 
+  const exportPNG = async () => {
+    if (voxelsRef.current.size === 0) return;
+    const blob = await sceneRef.current?.captureHero(2);
+    if (blob) downloadBlob("blocksmith.png", blob);
+  };
+
   const share = async () => {
     if (voxelsRef.current.size === 0) return;
     const url =
@@ -260,7 +286,7 @@ export default function App() {
     <div className={S.app}>
       <div className={S.bar}>
         <span className={S.title}>BLOCKSMITH</span>
-        <button className={S.btn} onClick={undo} title="Undo">
+        <button className={S.btn} onClick={undo} title="Undo (Ctrl+Z)">
           Undo
         </button>
         <button className={S.btn} onClick={clearAll}>
@@ -283,6 +309,9 @@ export default function App() {
         </button>
         <button className={S.btn} onClick={exportGLB}>
           GLB
+        </button>
+        <button className={S.btn} onClick={exportPNG} title="Save a 2x PNG snapshot">
+          PNG
         </button>
         <button className={S.btn} onClick={() => setDialog("ai")}>
           AI
@@ -321,26 +350,33 @@ export default function App() {
       <div className={S.footer}>
         <button
           className={tool === "place" ? S.btnActive : S.btn}
+          aria-pressed={tool === "place"}
+          title="Place blocks (1)"
           onClick={() => setTool("place")}
         >
           Place
         </button>
         <button
           className={tool === "remove" ? S.btnActive : S.btn}
+          aria-pressed={tool === "remove"}
+          title="Break blocks (2)"
           onClick={() => setTool("remove")}
         >
           Break
         </button>
         <button
           className={tool === "paint" ? S.btnActive : S.btn}
+          aria-pressed={tool === "paint"}
+          title="Paint blocks (3)"
           onClick={() => setTool("paint")}
         >
           Paint
         </button>
         <button
           className={mirror ? S.btnActive : S.btn}
+          aria-pressed={mirror}
           onClick={() => setMirror(!mirror)}
-          title="Mirror every edit across the X axis"
+          title="Mirror every edit across the X axis (M)"
         >
           Mirror
         </button>
@@ -350,6 +386,7 @@ export default function App() {
               key={p.name}
               title={p.name}
               aria-label={`Color: ${p.name}`}
+              aria-pressed={i === color}
               className={i === color ? S.swatchActive : S.swatch}
               style={{ background: p.hex }}
               onClick={() => {
