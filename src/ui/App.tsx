@@ -1,28 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { key, inBounds, type VoxelMap } from "../core/voxels";
+import { key, inBounds, serialize, deserialize, type VoxelMap } from "../core/voxels";
 import { PALETTE } from "../core/shading";
 import { starterTree } from "../core/templates";
 import { toJSONText, fromJSONText } from "../core/exporters/json";
 import { toOBJMTL } from "../core/exporters/objMtl";
 import { toGLB } from "../core/exporters/gltf";
+import { parseShareHash, shareFragment } from "../core/urlCodec";
+import { loadAutosave, saveAutosave } from "../storage/db";
 import { VoxelScene, type Pick } from "../three/scene";
 import { downloadBlob, downloadText } from "./download";
+import ImportModal from "./ImportModal";
+import AIHelpModal from "./AIHelpModal";
+import LibraryModal from "./LibraryModal";
 import S from "./App.module.css";
 
 type Tool = "place" | "remove" | "paint";
+type Dialog = null | "import" | "ai" | "library";
 
 export default function App() {
   const mountRef = useRef<HTMLDivElement>(null);
   const voxelsRef = useRef<VoxelMap>(starterTree());
   const undoRef = useRef<VoxelMap[]>([]);
+  const restoredRef = useRef(false);
   const [version, setVersion] = useState(0);
   const [tool, setTool] = useState<Tool>("place");
   const [color, setColor] = useState(0);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [shared, setShared] = useState(false);
   const toolRef = useRef(tool);
   const colorRef = useRef(color);
   toolRef.current = tool;
   colorRef.current = color;
-  const fileRef = useRef<HTMLInputElement>(null);
   const sceneRef = useRef<VoxelScene | null>(null);
 
   const bump = useCallback(() => setVersion((n) => n + 1), []);
@@ -46,6 +54,15 @@ export default function App() {
     voxelsRef.current = new Map();
     bump();
   }, [snapshot, bump]);
+
+  const replaceModel = useCallback(
+    (m: VoxelMap) => {
+      snapshot();
+      voxelsRef.current = m;
+      bump();
+    },
+    [snapshot, bump]
+  );
 
   const handleTap = useCallback(
     (pick: Pick) => {
@@ -91,12 +108,40 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync mesh on change
+  // Restore on load: share link first, then autosave, else keep the starter.
+  useEffect(() => {
+    const fromHash = parseShareHash(location.hash);
+    if (fromHash) {
+      // The shared model becomes current work; drop the hash so a refresh
+      // resumes from autosave instead of resetting to the link's snapshot.
+      history.replaceState(null, "", location.pathname + location.search);
+      voxelsRef.current = fromHash;
+      restoredRef.current = true;
+      bump();
+      return;
+    }
+    void loadAutosave().then((saved) => {
+      if (saved && !restoredRef.current) {
+        const m = deserialize(saved, PALETTE.length);
+        if (m.size > 0) voxelsRef.current = m;
+      }
+      restoredRef.current = true;
+      bump();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync mesh + debounced autosave on every edit
   useEffect(() => {
     sceneRef.current?.setVoxels(voxelsRef.current);
+    if (!restoredRef.current) return;
+    const t = setTimeout(() => {
+      void saveAutosave(serialize(voxelsRef.current));
+    }, 400);
+    return () => clearTimeout(t);
   }, [version]);
 
-  // ----- import / export -----
+  // ----- import / export / share -----
   const exportJSON = () =>
     downloadText("model.json", toJSONText(voxelsRef.current), "application/json");
 
@@ -112,26 +157,28 @@ export default function App() {
     downloadBlob("model.glb", new Blob([buf], { type: "model/gltf-binary" }));
   };
 
+  const share = async () => {
+    if (voxelsRef.current.size === 0) return;
+    const url =
+      location.origin + location.pathname + location.search + shareFragment(voxelsRef.current);
+    try {
+      await navigator.clipboard.writeText(url);
+      setShared(true);
+      setTimeout(() => setShared(false), 1500);
+    } catch {
+      window.prompt("Copy this link:", url);
+    }
+  };
+
   const importText = useCallback(
     (text: string) => {
       const m = fromJSONText(text);
       if (!m) return false;
-      snapshot();
-      voxelsRef.current = m;
-      bump();
+      replaceModel(m);
       return true;
     },
-    [snapshot, bump]
+    [replaceModel]
   );
-
-  const importFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => importText(String(reader.result));
-    reader.readAsText(file);
-    e.target.value = "";
-  };
 
   const count = voxelsRef.current.size;
 
@@ -145,8 +192,14 @@ export default function App() {
         <button className={S.btn} onClick={clearAll}>
           Clear
         </button>
-        <button className={S.btn} onClick={() => fileRef.current?.click()}>
+        <button className={S.btn} onClick={() => setDialog("library")}>
+          Library
+        </button>
+        <button className={S.btn} onClick={() => setDialog("import")}>
           Import
+        </button>
+        <button className={S.btn} onClick={share}>
+          {shared ? "Link copied!" : "Share"}
         </button>
         <button className={S.btn} onClick={exportJSON}>
           JSON
@@ -157,13 +210,9 @@ export default function App() {
         <button className={S.btn} onClick={exportGLB}>
           GLB
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".json,application/json"
-          style={{ display: "none" }}
-          onChange={importFile}
-        />
+        <button className={S.btn} onClick={() => setDialog("ai")}>
+          AI
+        </button>
       </div>
 
       <div className={S.canvas} ref={mountRef}>
@@ -173,6 +222,23 @@ export default function App() {
           {count} blocks
         </div>
       </div>
+
+      {dialog === "import" && (
+        <ImportModal onClose={() => setDialog(null)} onImportText={importText} />
+      )}
+      {dialog === "ai" && (
+        <AIHelpModal
+          onClose={() => setDialog(null)}
+          onOpenImport={() => setDialog("import")}
+        />
+      )}
+      {dialog === "library" && (
+        <LibraryModal
+          onClose={() => setDialog(null)}
+          onLoad={replaceModel}
+          getCurrent={() => voxelsRef.current}
+        />
+      )}
 
       <div className={S.footer}>
         <button
