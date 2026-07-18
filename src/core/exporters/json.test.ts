@@ -47,6 +47,17 @@ describe("lenient import (LLM-generated JSON path)", () => {
     expect(back!.get(key(1, 2, 3))).toBe(1);
   });
 
+  it("tolerates iOS/ChatGPT smart quotes from a paste", () => {
+    // Curly quotes (U+201C/U+201D), as substituted by iOS text fields on copy.
+    const back = fromJSONText(
+      '{“size”:16,“voxels”:[{“x”:8,“y”:0,“z”:5,“c”:4},{“x”:7,“y”:0,“z”:6,“c”:4}]}'
+    );
+    expect(back).not.toBeNull();
+    expect(back!.size).toBe(2);
+    expect(back!.get(key(8, 0, 5))).toBe(4);
+    expect(back!.get(key(7, 0, 6))).toBe(4);
+  });
+
   it("returns null for garbage input", () => {
     expect(fromJSONText("not json at all")).toBeNull();
     expect(fromJSONText("{}")).toBeNull();
