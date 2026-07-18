@@ -12,6 +12,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
   background: #232830;
   border-bottom: 2px solid #12141a;
   flex-wrap: wrap;
