@@ -110,13 +110,26 @@ function wolf(): VoxelMap {
 
 // ------------------------------------------------------------- balloon ---
 
-// Balloon — near-white so the game can tint it per-instance. Teardrop: round
-// body + a little knot below.
+// Balloon — near-white so the game can tint it per-instance. Full-height
+// teardrop built from circular slices: rounded cap, widest just above the
+// middle, stepped taper down to a tiny knot (classic voxel balloon).
 function balloon(): VoxelMap {
   const m: VoxelMap = new Map();
   const W = 9;
-  sphere(m, 8, 10, 8, 3.3, W);
-  put(m, 8, 6, 8, W); put(m, 8, 5, 8, W); // knot
+  // Radius per row, bottom (y=2) to top (y=15). Knot sits at y=0..1.
+  const profile: [number, number][] = [
+    [2, 1.5], [3, 2.5], [4, 3.5], [5, 4.5], [6, 5.2], [7, 5.8],
+    [8, 6.2], [9, 6.5], [10, 6.6], [11, 6.5], [12, 6.1], [13, 5.4],
+    [14, 4.3], [15, 2.8],
+  ];
+  for (const [y, r] of profile) {
+    const r2 = r * r;
+    const hi = Math.ceil(r);
+    for (let dx = -hi; dx <= hi; dx++)
+      for (let dz = -hi; dz <= hi; dz++)
+        if (dx * dx + dz * dz <= r2) put(m, 8 + dx, y, 8 + dz, W);
+  }
+  put(m, 8, 1, 8, W); put(m, 8, 0, 8, W); // knot
   return m;
 }
 
