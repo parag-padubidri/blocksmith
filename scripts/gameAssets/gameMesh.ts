@@ -30,6 +30,8 @@ const CM_HEX = [
   "#FF7BAC", // 14 Pink -> hero pink
   "#3D3833", // 15 Coal -> ink (dot eyes)
   "#FF9BC0", // 16 Blush (cheeks) — game-only extension
+  "#EEE8F2", // 17 Snow dim (~93%) — per-voxel shade jitter, game-only
+  "#DFD8E8", // 18 Snow dimmer (~86%) — per-voxel shade jitter, game-only
 ];
 
 const VIOLET: RGB = [0x5b / 255, 0x4e / 255, 0x8c / 255];

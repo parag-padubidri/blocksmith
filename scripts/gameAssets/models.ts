@@ -112,10 +112,17 @@ function wolf(): VoxelMap {
 
 // Balloon — near-white so the game can tint it per-instance. Full-height
 // teardrop built from circular slices: rounded cap, widest just above the
-// middle, stepped taper down to a tiny knot (classic voxel balloon).
+// middle, stepped taper down to a tiny knot (classic voxel balloon). Voxels
+// pick between three near-white shades via a deterministic hash so each
+// block reads distinct once tinted (red balloon = shades of red).
 function balloon(): VoxelMap {
   const m: VoxelMap = new Map();
-  const W = 9;
+  const SHADES = [9, 9, 17, 17, 18]; // white x2, dim x2, dimmer x1
+  const pick = (x: number, y: number, z: number): number => {
+    let h = (x * 73856093) ^ (y * 19349663) ^ (z * 83492791);
+    h = (h ^ (h >> 13)) >>> 0;
+    return SHADES[h % SHADES.length];
+  };
   // Radius per row, bottom (y=2) to top (y=15). Knot sits at y=0..1.
   const profile: [number, number][] = [
     [2, 1.5], [3, 2.5], [4, 3.5], [5, 4.5], [6, 5.2], [7, 5.8],
@@ -127,9 +134,10 @@ function balloon(): VoxelMap {
     const hi = Math.ceil(r);
     for (let dx = -hi; dx <= hi; dx++)
       for (let dz = -hi; dz <= hi; dz++)
-        if (dx * dx + dz * dz <= r2) put(m, 8 + dx, y, 8 + dz, W);
+        if (dx * dx + dz * dz <= r2)
+          put(m, 8 + dx, y, 8 + dz, pick(8 + dx, y, 8 + dz));
   }
-  put(m, 8, 1, 8, W); put(m, 8, 0, 8, W); // knot
+  put(m, 8, 1, 8, pick(8, 1, 8)); put(m, 8, 0, 8, pick(8, 0, 8)); // knot
   return m;
 }
 
