@@ -214,6 +214,38 @@ function cloud(): VoxelMap {
   return m;
 }
 
+// Lift basket — chunky rustic gondola for Mama Pig's lift. Oak plank floor
+// with dark plank strips, dark corner posts, and asymmetric rails: full-height
+// back/far walls, a low camera-side wall (pig stays visible) and an open
+// shooting front. glTFast mirrors x on import (authored +x renders at world
+// -x, same as the wolf/pig), so the open front is authored at +x to face the
+// wolves (-x) in game at yaw 0.
+function liftBasket(): VoxelMap {
+  const m: VoxelMap = new Map();
+  const OAK = 3, DK = 4;
+  box(m, 2, 13, 0, 1, 4, 12, OAK);       // plank floor
+  box(m, 5, 5, 0, 1, 4, 12, DK);         // dark plank strips
+  box(m, 10, 10, 0, 1, 4, 12, DK);
+  for (const [px, pz] of [[2, 4], [2, 12], [13, 4], [13, 12]] as const)
+    box(m, px, px, 0, 6, pz, pz, DK);    // corner posts
+  box(m, 2, 2, 2, 4, 4, 12, OAK);        // back wall (authored -x -> world +x)
+  box(m, 2, 2, 5, 5, 4, 12, DK);         // back top rail
+  box(m, 2, 13, 2, 4, 12, 12, OAK);      // far wall (+z)
+  box(m, 2, 13, 5, 5, 12, 12, DK);       // far top rail
+  box(m, 2, 13, 2, 3, 4, 4, OAK);        // camera wall (-z), low
+  box(m, 13, 13, 2, 2, 4, 12, OAK);      // shooting side (authored +x -> world -x), lowest
+  return m;
+}
+
+// Acorn — slingshot ammo. Squashed oak body, dark cap and 1-voxel stem.
+function acorn(): VoxelMap {
+  const m: VoxelMap = new Map();
+  sphere(m, 8, 3, 8, 3, 3);              // oak body
+  box(m, 5, 11, 5, 7, 5, 11, 4);         // dark cap
+  put(m, 8, 8, 8, 4);                    // stem
+  return m;
+}
+
 // Sun — bright yellow ball with a few orange flecks.
 function sun(): VoxelMap {
   const m: VoxelMap = new Map();
@@ -245,4 +277,6 @@ export const GAME_MODELS: GameModel[] = [
   { name: "chest", build: starterChest },
   { name: "cloud", build: cloud },
   { name: "sun", build: sun },
+  { name: "lift_basket", build: liftBasket },
+  { name: "acorn", build: acorn },
 ];
