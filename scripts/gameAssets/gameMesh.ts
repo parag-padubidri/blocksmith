@@ -3,7 +3,10 @@
 //   - remaps palette indices to the Candy Meadow hexes (spec §1),
 //   - bakes per-corner ambient occlusion into vertex colours,
 //   - tints shadows toward violet #5B4E8C (never grey/black, spec §1),
-//   - gives top faces a +10% sun-bounce lift (spec §4).
+//   - gives top faces a +10% sun-bounce lift (spec §4),
+//   - jitters each voxel's brightness deterministically so every block reads
+//     as a distinct shade of its material colour, uniformly across all models
+//     (see voxelJitter — generalizes the balloon's hand-authored pick()).
 // Kept out of src/ so the BlockSmith app palette is untouched.
 
 import type { VoxelMap, Cell } from "../../src/core/voxels";
@@ -50,6 +53,20 @@ function occ(v: VoxelMap, x: number, y: number, z: number): number {
   return v.has(key(x, y, z)) ? 1 : 0;
 }
 
+// Deterministic per-voxel brightness jitter so every block reads as a
+// slightly different shade of its material colour ("each block picks a
+// different brightness level" — the balloon's pick()-of-3-shades trick,
+// generalized to every model instead of hand-authored per model). Keyed by
+// voxel position only (not face index), so all 6 faces of one block agree —
+// unlike shading.ts's per-face grain(). Darken-only (never brightens) so it
+// composes safely with the AO/shadow-tint math below without risking
+// bright > 1. Same hash family as grain(), never Math.random().
+export function voxelJitter(x: number, y: number, z: number): number {
+  const s = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+  const f = s - Math.floor(s); // 0..1
+  return 1 - f * 0.12; // 0.88 .. 1.0
+}
+
 function normalAxis(d: number): number {
   const n = DIRS[d];
   return n[0] !== 0 ? 0 : n[1] !== 0 ? 1 : 2;
@@ -75,6 +92,7 @@ export function buildGameMesh(voxels: VoxelMap): GameMeshData {
       base = hexToRgb(CM_HEX[ci] ?? "#ff00ff");
       baseCache.set(ci, base);
     }
+    const jitter = voxelJitter(x, y, z);
     for (let d = 0; d < 6; d++) {
       const nb = DIRS[d] as Cell;
       if (voxels.has(key(x + nb[0], y + nb[1], z + nb[2]))) continue; // cull interior
@@ -103,7 +121,7 @@ export function buildGameMesh(voxels: VoxelMap): GameMeshData {
           z + nb[2] + o1[2] + o2[2]
         );
         const ao = side1 && side2 ? 0 : 3 - side1 - side2 - cor;
-        const bright = shade * AO_CURVE[ao];
+        const bright = shade * AO_CURVE[ao] * jitter;
 
         let r = base[0], g = base[1], b = base[2];
         if (d === 2) { r += (1 - r) * 0.1; g += (1 - g) * 0.1; b += (1 - b) * 0.1; } // top bounce

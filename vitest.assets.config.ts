@@ -6,7 +6,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["scripts/gameAssets/**/*.gen.ts"],
+    include: ["scripts/gameAssets/**/*.gen.ts", "scripts/gameAssets/**/*.test.ts"],
     environment: "node",
     testTimeout: 30000,
   },
